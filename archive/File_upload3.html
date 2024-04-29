@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Image Upload and Prediction</title>
+
+  
+</head>
+<body>
+  <input type="file" accept="image/*" capture="user" id="fileInput">
+  <button onclick="uploadImage()">Upload</button>
+  <div id="uploadedImage"></div>
+  <div id="predictionResult"></div>
+
+  <script>
+    function uploadImage() {
+      var fileInput = document.getElementById('fileInput');
+      var file = fileInput.files[0];
+      var formData = new FormData();
+      formData.append('image', file);
+
+      // Display the uploaded image immediately
+      var uploadedImageDiv = document.getElementById('uploadedImage');
+      var img = document.createElement('img');
+      img.src = URL.createObjectURL(file);
+      uploadedImageDiv.innerHTML = ''; // Clear previous content
+      uploadedImageDiv.appendChild(img);
+
+      // Send the image to the server for prediction
+      fetch('http://127.0.0.1:5000/upload', {
+        method: 'POST',
+        body: formData
+      })
+      .then(response => {
+        if (!response.ok) {
+        throw new Error('Failed to upload image: ' + response.status);
+        }
+        return response.json();
+    })
+    .then(processedData => predict(processedData))
+    .catch(error => console.error('Error uploading image:', error));
+    }
+
+    function predict(processedData) {
+      fetch('http://127.0.0.1:5000/predict', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(processedData)
+      })
+      .then(response => response.json())
+      .then(resultData => {
+        // Display the prediction result
+        var predictionResultDiv = document.getElementById('predictionResult');
+        predictionResultDiv.textContent = resultData.prediction;
+
+      })
+      .catch(error => console.error('Error predicting:', error));
+    }
+  </script>
+</body>
+</html>

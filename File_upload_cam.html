@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Image Upload and Prediction</title>
+</head>
+<body>
+    <input type="file" id="fileInput" accept="image/*">
+    <button onclick="toggleCamera()">Toggle Camera</button>
+    <div id="cameraContainer" style="display: none;">
+      <video id="cameraFeed" autoplay style="max-width: 300px; max-height: 300px;"></video>
+      <button onclick="takeSnapshot()">Take Snapshot</button>
+      <button onclick="closeCamera()">Close Camera</button>
+    </div>
+    <button onclick="uploadImage()">Upload</button>
+    <div id="uploadedImage"></div>
+    <div id="predictionResult"></div>
+    
+    <script>
+      let isCameraOpen = false;
+      let mediaStream;
+    
+      function toggleCamera() {
+        var predText = document.getElementById('predictionResult');
+        predText.innerHTML = '';
+        if (isCameraOpen) {
+          closeCamera();
+        } else {
+          openCamera();
+        }
+      }
+    
+      function openCamera() {
+        const fileInput = document.getElementById('fileInput');
+        fileInput.value = ''; // Reset file input
+        fileInput.setAttribute('capture', 'environment');
+        document.getElementById('uploadedImage').innerHTML = '';
+        document.getElementById('cameraContainer').style.display = 'block';
+    
+        navigator.mediaDevices.getUserMedia({ video: true })
+          .then(function(stream) {
+            mediaStream = stream;
+            const video = document.getElementById('cameraFeed');
+            video.srcObject = stream;
+            video.play();
+            isCameraOpen = true;
+          })
+          .catch(function(error) {
+            console.error('Error accessing camera:', error);
+            alert('Error accessing camera. Please try again.');
+          });
+      }
+    
+      function takeSnapshot() {
+        const video = document.getElementById('cameraFeed');
+        const canvas = document.createElement('canvas');
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        const imageDataURL = canvas.toDataURL('image/jpeg');
+        const uploadedImage = document.getElementById('uploadedImage');
+        uploadedImage.innerHTML = '<img src="' + imageDataURL + '" style="max-width: 300px; max-height: 300px;">';
+
+        const blob = dataURItoBlob(imageDataURL);
+        const fileName = 'camera_capture_' + new Date().getTime() + '.jpg';
+        const file = new File([blob], fileName, { type: 'image/jpeg' });
+
+        const fileList = new DataTransfer();
+        fileList.items.add(file);
+
+        const fileInput = document.getElementById('fileInput');
+        fileInput.files = fileList.files;
+
+        closeCamera()
+      }
+    
+      function closeCamera() {
+        const video = document.getElementById('cameraFeed');
+        video.srcObject = null;
+        mediaStream.getTracks().forEach(track => track.stop());
+        document.getElementById('cameraContainer').style.display = 'none';
+        isCameraOpen = false;
+      }
+    
+      function dataURItoBlob(dataURI) {
+        const byteString = atob(dataURI.split(',')[1]);
+        const mimeString = dataURI.split(',')[0].split(':')[1].split(';')[0];
+        const ab = new ArrayBuffer(byteString.length);
+        const ia = new Uint8Array(ab);
+        for (let i = 0; i < byteString.length; i++) {
+          ia[i] = byteString.charCodeAt(i);
+        }
+        const blob = new Blob([ab], { type: mimeString });
+        return blob;
+      }
+
+
+    function uploadImage() {
+      var predictionResultDiv = document.getElementById('predictionResult');
+      predictionResultDiv.textContent = '';
+      var fileInput = document.getElementById('fileInput');
+      var file = fileInput.files[0];
+      if (file) {
+        var formData = new FormData();
+        formData.append('image', file);
+      // Display the uploaded image immediately
+      var uploadedImageDiv = document.getElementById('uploadedImage');
+      var img = document.createElement('img');
+      img.src = URL.createObjectURL(file);
+      uploadedImageDiv.innerHTML = ''; // Clear previous content
+      uploadedImageDiv.appendChild(img);
+
+
+        fetch('http://127.0.0.1:5000/upload', {
+        // fetch('https://d3da-182-66-84-210.ngrok-free.app/upload', {
+          method: 'POST',
+          body: formData
+        })
+        .then(response => {
+          if (!response.ok) {
+            throw new Error('Failed to upload image: ' + response.status);
+          }
+          return response.json();
+        })
+        .then(processedData => predict(processedData))
+        .catch(error => console.error('Error uploading image:', error));
+      }
+    }
+
+    function predict(processedData) {
+      fetch('http://127.0.0.1:5000/predict', {
+      // fetch('https://d3da-182-66-84-210.ngrok-free.app/predict', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(processedData)
+      })
+      .then(response => response.json())
+      .then(resultData => {
+        var predictionResultDiv = document.getElementById('predictionResult');
+        predictionResultDiv.textContent = resultData.prediction;
+      })
+      .catch(error => console.error('Error predicting:', error));
+    }
+  </script>
+</body>
+</html>

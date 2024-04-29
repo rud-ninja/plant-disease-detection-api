@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Image Upload and Prediction</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+        }
+        h1 {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f9f9f9;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+        input[type="file"] {
+            display: none;
+        }
+        label {
+            display: block;
+            margin-bottom: 10px;
+            text-align: center;
+            cursor: pointer;
+            color: #333;
+            padding: 10px;
+            background-color: #e9e9e9;
+            border-radius: 4px;
+            transition: background-color 0.3s ease;
+        }
+        label:hover {
+            background-color: #d9d9d9;
+        }
+        #cameraContainer {
+            display: none;
+            text-align: center;
+        }
+        video {
+            max-width: 100%;
+            border-radius: 4px;
+            margin-bottom: 10px;
+        }
+        button {
+            padding: 10px 20px;
+            margin: 10px;
+            border: none;
+            border-radius: 4px;
+            background-color: #007bff;
+            color: white;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        #uploadedImage {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        #predictionResult {
+            text-align: center;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Image Upload and Prediction</h1>
+        <label for="fileInput">Choose Image</label>
+        <input type="file" id="fileInput" accept="image/*">
+        <div id="cameraContainer">
+            <video id="cameraFeed" autoplay style="max-width: 100%;"></video>
+            <button onclick="takeSnapshot()">Take Snapshot</button>
+            <button onclick="closeCamera()">Close Camera</button>
+        </div>
+        <button onclick="toggleCamera()">Toggle Camera</button>
+        <button onclick="uploadImage()">Upload</button>
+        <div id="uploadedImage"></div>
+        <div id="predictionResult"></div>
+    </div>
+    <script>
+        let isCameraOpen = false;
+        let mediaStream;
+
+        function toggleCamera() {
+            document.getElementById('predictionResult').innerHTML = '';
+            isCameraOpen ? closeCamera() : openCamera();
+        }
+
+        function openCamera() {
+            const fileInput = document.getElementById('fileInput');
+            fileInput.value = '';
+            document.getElementById('uploadedImage').innerHTML = '';
+            document.getElementById('cameraContainer').style.display = 'block';
+
+            navigator.mediaDevices.getUserMedia({ video: true })
+                .then(stream => {
+                    mediaStream = stream;
+                    const video = document.getElementById('cameraFeed');
+                    video.srcObject = stream;
+                    video.play();
+                    isCameraOpen = true;
+                })
+                .catch(error => {
+                    console.error('Error accessing camera:', error);
+                    alert('Error accessing camera. Please try again.');
+                });
+        }
+
+        function takeSnapshot() {
+            const video = document.getElementById('cameraFeed');
+            const canvas = document.createElement('canvas');
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+            const imageDataURL = canvas.toDataURL('image/jpeg');
+            document.getElementById('uploadedImage').innerHTML = `<img src="${imageDataURL}" style="max-width: 300px; max-height: 300px;">`;
+
+            const blob = dataURItoBlob(imageDataURL);
+            const fileName = `camera_capture_${new Date().getTime()}.jpg`;
+            const file = new File([blob], fileName, { type: 'image/jpeg' });
+
+            const fileList = new DataTransfer();
+            fileList.items.add(file);
+
+            document.getElementById('fileInput').files = fileList.files;
+            closeCamera();
+        }
+
+        function closeCamera() {
+            const video = document.getElementById('cameraFeed');
+            video.srcObject = null;
+            mediaStream.getTracks().forEach(track => track.stop());
+            document.getElementById('cameraContainer').style.display = 'none';
+            isCameraOpen = false;
+        }
+
+        function dataURItoBlob(dataURI) {
+            const byteString = atob(dataURI.split(',')[1]);
+            const mimeString = dataURI.split(',')[0].split(':')[1].split(';')[0];
+            const ab = new ArrayBuffer(byteString.length);
+            const ia = new Uint8Array(ab);
+            for (let i = 0; i < byteString.length; i++) {
+                ia[i] = byteString.charCodeAt(i);
+            }
+            return new Blob([ab], { type: mimeString });
+        }
+
+        function uploadImage() {
+            const fileInput = document.getElementById('fileInput');
+            const file = fileInput.files[0];
+            if (file) {
+                const formData = new FormData();
+                formData.append('image', file);
+
+                const img = document.createElement('img');
+                img.src = URL.createObjectURL(file);
+                document.getElementById('uploadedImage').innerHTML = '';
+                document.getElementById('uploadedImage').appendChild(img);
+
+                fetch('https://d3da-182-66-84-210.ngrok-free.app/upload', {
+                    method: 'POST',
+                    body: formData
+                })
+                .then(response => {
+                    if (!response.ok) throw new Error('Failed to upload image: ' + response.status);
+                    return response.json();
+                })
+                .then(processedData => predict(processedData))
+                .catch(error => console.error('Error uploading image:', error));
+            }
+        }
+
+        function predict(processedData) {
+            fetch('https://d3da-182-66-84-210.ngrok-free.app/predict', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(processedData)
+            })
+            .then(response => response.json())
+            .then(resultData => {
+                document.getElementById('predictionResult').textContent = resultData.prediction;
+            })
+            .catch(error => console.error('Error predicting:', error));
+        }
+    </script>
+</body>
+</html>

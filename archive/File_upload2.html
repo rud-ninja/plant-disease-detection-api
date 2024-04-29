@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Image Upload and Prediction</title>
+</head>
+<body>
+  <input type="file" id="fileInput">
+  <button onclick="uploadImage()">Upload</button>
+  <div id="resultImage"></div>
+
+  <script>
+    function uploadImage() {
+      var fileInput = document.getElementById('fileInput');
+      var file = fileInput.files[0];
+      var formData = new FormData();
+      formData.append('image', file);
+
+      fetch('http://127.0.0.1:5000/upload', {
+        method: 'POST',
+        body: formData
+      })
+      .then(response => response.json())
+      .then(processedData => predict(processedData))
+      .catch(error => console.error('Error uploading image:', error));
+    }
+
+    function predict(processedData) {
+      fetch('http://127.0.0.1:5000/predict', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(processedData)
+      })
+      .then(response => response.json())
+      .then(resultData => {
+        var resultImageDiv = document.getElementById('resultImage');
+        var img = document.createElement('img');
+        img.src = 'data:image/png;base64,' + resultData.image_base64;
+        resultImageDiv.appendChild(img);
+      })
+      .catch(error => console.error('Error predicting:', error));
+    }
+  </script>
+</body>
+</html>
